@@ -1,0 +1,80 @@
+---
+title: "Stock Niyo"
+author: "Niyo D. JC"
+date: "2024-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Dépendances
+
+```{r}
+library(quantmod)
+library(TTR)
+library(lubridate)
+```
+
+```{r}
+data <- getSymbols("ADBE",env=NULL, from="2009-01-01", to = "2024-10-31")
+```
+
+```{r}
+library(quantmod)
+
+create_stock_dataframe <- function(dta) {
+  
+  colnames(dta) <- c("Open", "High", "Low", "Close", "Volume", "Adjusted")
+  
+  # Calcul des indicateurs techniques
+  MAV5Day <- SMA(dta$Volume, n = 5) # Moyenne mobile 5 jours
+  RSI3Day <- RSI(Cl(dta), n = 3) # RSI 3 jours (Relative Strength Index)
+  RSI9Day <- RSI(Cl(dta), n = 9) # RSI 9 jours
+  RSI14Day <- RSI(Cl(dta), n = 14) # RSI 14 jours
+  RSI30Day <- RSI(Cl(dta), n = 30) # RSI 30 jours
+  MA10Day <- SMA(Cl(dta), n = 10) # Moyenne mobile 10 jours
+  MA30Day <- SMA(Cl(dta), n = 30) # Moyenne mobile 30 jours
+  MA50Day <- SMA(Cl(dta), n = 50) # Moyenne mobile 50 jours
+  
+  
+  df <- data.frame(
+    Date = index(dta),
+    Open = coredata(dta$Open),
+    High = coredata(dta$High),
+    Low = coredata(dta$Low),
+    Close = coredata(dta$Close),
+    Volume = coredata(dta$Volume),
+    MAV5Day = coredata(MAV5Day),
+    RSI3Day = coredata(RSI3Day),
+    RSI9Day = coredata(RSI9Day),
+    RSI14Day = coredata(RSI14Day),
+    RSI30Day = coredata(RSI30Day),
+    MA10Day = coredata(MA10Day),
+    MA30Day = coredata(MA30Day),
+    MA50Day = coredata(MA50Day)
+  )
+  
+  return(df)
+}
+
+```
+
+```{r}
+df_stock <- create_stock_dataframe(data)
+df_stock$Date <- as.Date(df_stock$Date, format = "%Y-%m-%d")
+df_stock$Quarter <- paste0("Q", month(df_stock$Date), "-", year(df_stock$Date))
+```
+
+```{r}
+macro_sentiment <- read.csv(file.choose())
+macro_sentiment$DATE <- as.Date(macro_sentiment$DATE, format = "%Y-%m-%d")
+macro_sentiment$Quarter <- paste0("Q", month(macro_sentiment$DATE), "-", year(macro_sentiment$DATE))
+```
+
+```{r}
+combined_df <- merge(df_stock, macro_sentiment, by = "Quarter", all = TRUE)
+combined_df <- combined_df[, !(colnames(combined_df) %in% c("Quarter", "DATE"))]
+```
+
