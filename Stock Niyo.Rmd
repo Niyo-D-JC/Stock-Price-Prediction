@@ -15,16 +15,19 @@ knitr::opts_chunk$set(echo = TRUE)
 library(quantmod)
 library(TTR)
 library(lubridate)
+library(dplyr) 
+
+library(zoo) # Pour imputation
+library(TSA)
+library(extRemes)
 ```
 
 ```{r}
-data <- getSymbols("ADBE",env=NULL, from="2009-01-01", to = "2024-10-31")
+data <- getSymbols("ADBE",env=NULL, from="2010-01-01", to = "2024-10-31")
 ```
 
 ```{r}
-library(quantmod)
-
-create_stock_dataframe <- function(dta) {
+create_stock_dataframe <- function(dta, sp500_symbol = "^GSPC", cac40_symbol = "^FCHI") {
   
   colnames(dta) <- c("Open", "High", "Low", "Close", "Volume", "Adjusted")
   
@@ -37,8 +40,29 @@ create_stock_dataframe <- function(dta) {
   MA10Day <- SMA(Cl(dta), n = 10) # Moyenne mobile 10 jours
   MA30Day <- SMA(Cl(dta), n = 30) # Moyenne mobile 30 jours
   MA50Day <- SMA(Cl(dta), n = 50) # Moyenne mobile 50 jours
+  EMA10Day <- EMA(Cl(dta), n = 10) # Moyenne mobile exponentielle 10 jours
   
+  # Variation de prix (absolue et relative)
+  PriceChange <- diff(Cl(dta), lag = 1) # Variation absolue
+
+  # Différence entre prix de clôture et d'ouverture
+  CloseOpenDiff <- Cl(dta) - Op(dta)
   
+  # Différence entre High et Low
+  HighLowDiff <- Hi(dta) - Lo(dta)
+  
+  # Convergence/Divergence des Moyennes Mobiles (MACD)
+  MACD <- MACD(Cl(dta), nFast = 12, nSlow = 26, nSig = 9) # Valeurs Fast, Slow, Signal
+  
+  # Volume On-Balance (OBV)
+  OBV <- OBV(Cl(dta), dta$Volume)
+  
+  # Ratio de Volume (Volume Ratio - VR)
+  UpVolume <- ifelse(PriceChange > 0, dta$Volume, 0) # Volume des jours à hausse
+  DownVolume <- ifelse(PriceChange < 0, dta$Volume, 0) # Volume des jours à baisse
+  VR <- SMA(UpVolume, n = 14) / SMA(DownVolume, n = 14) # Ratio glissant sur 14 jours
+  
+  # Construction du DataFrame
   df <- data.frame(
     Date = index(dta),
     Open = coredata(dta$Open),
@@ -53,8 +77,27 @@ create_stock_dataframe <- function(dta) {
     RSI30Day = coredata(RSI30Day),
     MA10Day = coredata(MA10Day),
     MA30Day = coredata(MA30Day),
-    MA50Day = coredata(MA50Day)
+    MA50Day = coredata(MA50Day),
+    EMA10Day = coredata(EMA10Day),
+    CloseOpenDiff = coredata(CloseOpenDiff),
+    HighLowDiff = coredata(HighLowDiff),
+    MACD = coredata(MACD$macd),
+    Signal = coredata(MACD$signal),
+    OBV = coredata(OBV),
+    VR = coredata(VR)
   )
+  
+   # Récupération des données des indices
+  sp500_data <- getSymbols(sp500_symbol, env = NULL, from = min(df$Date), to = max(df$Date), auto.assign = FALSE)
+  cac40_data <- getSymbols(cac40_symbol, env = NULL, from = min(df$Date), to = max(df$Date), auto.assign = FALSE)
+  
+  # Extraction des prix de clôture et transformation en DataFrame
+  sp500_close <- data.frame(Date = index(sp500_data), SP_Close = coredata(Cl(sp500_data)))
+  cac40_close <- data.frame(Date = index(cac40_data), CAC_Close = coredata(Cl(cac40_data)))
+  
+  # Jointures avec le DataFrame principal sur la colonne "Date"
+  df <- left_join(df, sp500_close, by = "Date")
+  df <- left_join(df, cac40_close, by = "Date")
   
   return(df)
 }
@@ -76,5 +119,45 @@ macro_sentiment$Quarter <- paste0("Q", month(macro_sentiment$DATE), "-", year(ma
 ```{r}
 combined_df <- merge(df_stock, macro_sentiment, by = "Quarter", all = TRUE)
 combined_df <- combined_df[, !(colnames(combined_df) %in% c("Quarter", "DATE"))]
+combined_df$Date <- as.Date(combined_df$Date)
+combined_df <- combined_df[order(combined_df$Date), ]
 ```
 
+```{r}
+# Imputation des valeurs manquantes dans GSPC.Close et FCHI.Close avec la valeur précédente
+combined_df$GSPC.Close <- na.locf(combined_df$GSPC.Close, na.rm = FALSE)
+combined_df$FCHI.Close <- na.locf(combined_df$FCHI.Close, na.rm = FALSE)
+
+missing_GSPC_after <- sum(is.na(combined_df$GSPC.Close))
+missing_FCHI_after <- sum(is.na(combined_df$FCHI.Close))
+
+cat("Nombre de valeurs manquantes dans GSPC.Close après imputation : ", missing_GSPC_after, "\n")
+cat("Nombre de valeurs manquantes dans FCHI.Close après imputation : ", missing_FCHI_after, "\n")
+```
+
+### Prix de cloture
+
+```{r}
+combined_df$Rend <- Delt(combined_df$Close, k = 1, type = 'log')
+summary(combined_df$Close)
+```
+
+```{r}
+adobe_ts <- ts(na.omit(combined_df$Close), frequency = 252) # 252 pour les jours de trading annuels
+decomp <- decompose(adobe_ts)
+plot(decomp)
+```
+
+```{r}
+combined_df$Rend <- - Delt(combined_df$Close, k = 1, type = 'log')
+```
+
+```{r}
+adobe_ts <- ts(na.omit(combined_df$Rend), frequency = 252) # 252 pour les jours de trading annuels
+decomp <- decompose(adobe_ts)
+plot(decomp)
+```
+
+```{r}
+(adf_test <- adf.test(na.omit(combined_df$Rend), alternative = "stationary", k = 0))
+```
