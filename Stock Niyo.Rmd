@@ -143,13 +143,17 @@ summary(combined_df$Close)
 ```
 
 ```{r}
+sd(na.omit(combined_df$Close))
+```
+
+```{r}
 adobe_ts <- ts(na.omit(combined_df$Close), frequency = 252) # 252 pour les jours de trading annuels
 decomp <- decompose(adobe_ts)
 plot(decomp)
 ```
 
 ```{r}
-combined_df$Rend <- - Delt(combined_df$Close, k = 1, type = 'log')
+combined_df$Rend <- Delt(combined_df$Close, k = 1, type = 'log')
 ```
 
 ```{r}
@@ -160,4 +164,16 @@ plot(decomp)
 
 ```{r}
 (adf_test <- adf.test(na.omit(combined_df$Rend), alternative = "stationary", k = 0))
+```
+
+```{r}
+pacf(na.omit(combined_df$Rend))
+```
+
+```{r}
+summary(combined_df$Rend)
+```
+
+```{r}
+acf(data$ADBE.Adjusted, lag.max = 50)
 ```
