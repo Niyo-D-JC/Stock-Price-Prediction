@@ -1,0 +1,141 @@
+---
+title: "FARIMA-GARCH"
+author: "DEBA"
+date: "12/22/2024"
+output: html_document
+---
+
+```{r}
+library(arfima) 
+library(quantmod)
+library(forecast)
+library(rugarch)
+library(tseries)
+```
+
+
+```{r}
+# Étape 1 : Chargement des données et calcul des rendements
+getSymbols("ADBE", from = "2010-01-01", to = "2024-10-31", src = "yahoo")
+adobe_prices <- Cl(ADBE)
+adobe_returns <- na.omit(diff(log(adobe_prices)))
+```
+
+
+```{r}
+# Étape 2 : Analyse graphique
+plot(adobe_returns, main = "Rendements Logarithmiques d'Adobe", ylab = "Rendements", col = "blue")
+par(mfrow = c(2, 2))
+acf(adobe_returns, main = "ACF des rendements")
+pacf(adobe_returns, main = "PACF des rendements")
+
+acf(adobe_returns**2, lag.max = 100, main = "ACF des carrés des rendements")
+
+# Test de stationnarité avec ADF
+adf_test <- adf.test(adobe_returns)
+print(adf_test)
+```
+```{r}
+model <-arfima(as.numeric(adobe_returns), order = c(1, 0, 2))
+```
+```{r}
+summary(model)
+model$modes[[1]]$dfrac
+
+```
+
+
+
+```{r}
+# Étape 3 : Grid search pour le modèle FARIMA avec arfima
+grid_search_farima <- function(data, max_p = 1, max_q = 0) {
+  results <- list()  # Liste pour stocker les modèles
+  
+  for (p in 0:max_p) {
+    for (q in 0:max_q) {
+      tryCatch({
+        # Ajustement du modèle FARIMA
+        model <- arfima(data, order = c(p, 0, q))
+        
+        # Extraction du AIC
+        aic <- AIC(model)
+        
+        # Vérification de la blancheur des résidus
+        residuals <- residuals(model)$Mode1
+        lb_pval <- Box.test(residuals, lag = 20, type = "Ljung-Box")$p.value
+        
+        # Stockage des résultats
+        results <- append(results, list(list(
+          p = p,
+          q = q,
+          d = model$modes[[1]]$dfrac,
+          aic = aic,
+          LBox_pval = lb_pval
+        )))
+      }, error = function(e) {})
+    }
+  }
+  
+  # Tri des modèles par AIC croissant
+  results <- results[order(sapply(results, function(x) x$aic))]
+  
+  return(results)
+}
+
+# Recherche des modèles
+farima_results <- grid_search_farima(as.numeric(adobe_returns))
+```
+
+
+```{r}
+# Affichage des meilleurs modèles
+cat("Top 5 modèles FARIMA triés par AIC :\n")
+for (i in 1:min(5, length(farima_results))) {
+  cat(sprintf("Modèle FARIMA(%d, %.3f, %d): AIC = %.3f, Ljung-Box p-value = %.3f\n",
+              farima_results[[i]]$p, farima_results[[i]]$d, farima_results[[i]]$q,
+              farima_results[[i]]$aic, farima_results[[i]]$lb_pval))
+}
+```
+
+
+```{r}
+# Étape 4 : Sélection du meilleur modèle et vérification des diagnostics
+best_model <- farima_results[[1]]$model
+
+# Résumé du meilleur modèle
+print(summary(best_model))
+
+# Vérification des résidus
+best_residuals <- best_model$residuals
+
+par(mfrow = c(2, 1))
+acf(best_residuals, main = "ACF des Résidus du FARIMA")
+pacf(best_residuals, main = "PACF des Résidus du FARIMA")
+Box.test(best_residuals, lag = 20, type = "Ljung-Box")
+
+# Étape 5 : Modèle GARCH sur les résidus FARIMA
+spec_garch <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+                         mean.model = list(armaOrder = c(best_model$p, best_model$q), include.mean = FALSE),
+                         distribution.model = "std")  # Distribution t-student
+
+garch_fit <- ugarchfit(spec = spec_garch, data = best_residuals)
+
+# Résultats du modèle GARCH
+show(garch_fit)
+
+# Étape 6 : Vérification des résidus standardisés GARCH
+garch_residuals <- residuals(garch_fit, standardize = TRUE)
+
+par(mfrow = c(2, 1))
+acf(garch_residuals, main = "ACF des Résidus Standardisés du GARCH")
+pacf(garch_residuals, main = "PACF des Résidus Standardisés du GARCH")
+Box.test(garch_residuals, lag = 20, type = "Ljung-Box")
+ArchTest(garch_residuals, lags = 20)
+
+# Étape 7 : Prévisions avec le modèle final
+forecast <- ugarchforecast(garch_fit, n.ahead = 10)
+print(forecast)
+plot(forecast, which = 1)  # Graphique des prévisions
+
+```
+
