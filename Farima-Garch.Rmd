@@ -15,6 +15,7 @@ library(openxlsx)
 library(xts)
 ```
 
+# Estimation d'un modèle FARIMA-GARCH 
 
 ```{r}
 # Étape 1 : Chargement des données et calcul des rendements
@@ -22,7 +23,7 @@ getSymbols("ADBE", from = "2010-01-01", to = "2024-10-31", src = "yahoo")
 adobe_prices <- Cl(ADBE)
 adobe_returns <- na.omit(diff(log(adobe_prices)))
 ```
-
+## Étape 2 : Analyse graphique
 
 ```{r}
 # Étape 2 : Analyse graphique
@@ -34,19 +35,22 @@ plot(adobe_returns, main = "Rendements Logarithmiques d'Adobe", ylab = "Rendemen
 acf(adobe_returns, main = "ACF des rendements")
 pacf(adobe_returns, main = "PACF des rendements")
 
-acf(adobe_returns**2, lag.max = 100, main = "ACF des carrés des rendements")
+acf(adobe_returns**2, lag.max = 80, main = "ACF des carrés des rendements")
 
 # Test de stationnarité avec ADF
 adf_test <- adf.test(adobe_returns)
 print(adf_test)
 ```
 
+L'autocorrélogramme des rendements indique cette chronique est stationnaire, ce qui est confirmé par le test ADF (p.value <0.05).
+L'autocorrélogramme du carré des rendements semble indiquer la persistence des corrélations. Cela motive l'estimation d'un modèle FARIMA.
+L'orde maximal ar est 5 et l'ordre maximal ma est 2.
 
-
+## Étape 3 : Grid search pour le modèle FARIMA avec arfima
 
 ```{r}
 # Étape 3 : Grid search pour le modèle FARIMA avec arfima
-grid_search_farima <- function(data, max_p = 5, max_q = 3) {
+grid_search_farima <- function(data, max_p = 5, max_q = 2) {
   results <- list()  # Liste pour stocker les modèles
   
   for (p in 0:max_p) {
@@ -94,11 +98,12 @@ farima_results <- grid_search_farima(as.numeric(adobe_returns))
 # Affichage des meilleurs résultats
 farima_results
 ```
+Le modèle optimal obtenu est un FARIMA(3,d,2) avec d=-0.0277 < 0, ce qui met en doute la persistence d'une mémoire longue et contrarie un ajustement FARIMA faible. Toutefois, d n'est pas significativement différent de 0, donnant ainsi la possibilité de s'orienter vers un modèle ARIMA(3,0,2).
 
-
+## Étape 4 : Sélection du meilleur modèle et vérification des diagnostics
 ```{r}
 # Étape 4 : Sélection du meilleur modèle et vérification des diagnostics
-best_model <- arfima(data, order = c(3, 0, 2))
+best_model <- arfima(as.numeric(adobe_returns), order = c(3, 0, 2))
 
 # Résumé du meilleur modèle
 print(summary(best_model))
@@ -112,11 +117,15 @@ best_residuals <- residuals(best_model)$Mode1
 par(mfrow = c(2, 1))
 acf(best_residuals, main = "ACF des Résidus du FARIMA")
 pacf(best_residuals, main = "PACF des Résidus du FARIMA")
+
+adf.test(best_residuals)
 Box.test(best_residuals, lag = 20, type = "Ljung-Box")
 ```
-
+Les résidus du modèle optimal passe le test de blancheur des résidus (p.value>0.7) et ces résidus sont stationnaire comme l'indique le corrélogramme (conirmé par le test ADF, p.value<0.05).
+Ces résisdus remplissent donc les pré-requis pour passer au modèle GARCH.
 
 ## Étape 5 : Modèle GARCH sur les résidus FARIMA
+Dans cette section nous estimons un GARCH(p,q) avec p et q choisis avec parcimonie tout en privilégiant un AIC minimal.
 ```{r}
 # Estimation des modèles GARCH(p, q) avec rugarch
 grid_search_garch <- function(residuals, max_p = 2, max_q = 2) {
@@ -149,10 +158,10 @@ garch_results <- grid_search_garch(best_residuals)
 print(garch_results)
 
 ```
-
+Le meilleur compromis conduit au modèle GARCH(1,1) comme modèle optimal.
 
 ```{r}
-# Étape 5 : Modèle GARCH sur les résidus FARIMA
+# Modèle GARCH optimal
 spec_garch <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
                          mean.model = list(armaOrder = c(0, 0), include.mean = FALSE),
                          distribution.model = "std")  # Distribution t-student
@@ -166,14 +175,15 @@ garch_fit <- ugarchfit(spec = spec_garch, data = best_residuals)
 show(garch_fit)
 ```
 
-
+## Étape 6 : Vérification des résidus standardisés GARCH
 ```{r}
 # Étape 6 : Vérification des résidus standardisés GARCH
 garch_residuals <- residuals(garch_fit, standardize = TRUE)
+garch_residuals <- ts(garch_residuals)
 
 par(mfrow = c(2, 1))
-acf(garch_residuals, main = "ACF des Résidus Standardisés du GARCH")
-pacf(garch_residuals, main = "PACF des Résidus Standardisés du GARCH")
+acf(garch_residuals, lag.max = 80, main = "ACF des Résidus Standardisés du GARCH")
+pacf(garch_residuals, lag.max = 80, main = "PACF des Résidus Standardisés du GARCH")
 Box.test(garch_residuals, lag = 20, type = "Ljung-Box")
 #ArchTest(garch_residuals, lags = 20)
 ```
@@ -201,4 +211,65 @@ chart_Series(adobe_returns$ADBE.Close)
 
 
 ```
+## Etape 8: Forcasting avec FARIMA-GARCH
+
+```{r}
+# Prévisions du modèle FARIMA
+farima_forecast <- predict(best_model, n.ahead = 100)  # 10 prévisions
+
+# Prévisions du modèle GARCH
+garch_forecast <- sigma(ugarchforecast(garch_fit, n.ahead = 100))
+
+
+
+
+
+# Combinaison des prévisions de FARIMA et de GARCH
+predicted_returns <- farima_forecast$pred
+predicted_volatility <- ts(garch_forecast)
+
+# Calcul des intervalles de confiance
+lower_bound <- predicted_returns - 1.96 * predicted_volatility
+upper_bound <- predicted_returns + 1.96 * predicted_volatility
+
+# Affichage des résultats
+# 5. Création d'un DataFrame pour afficher les résultats
+forecast_results <- data.frame(
+  PredictedReturns = predicted_returns,
+  LowerBound = lower_bound,
+  UpperBound = upper_bound,
+  PredictedVolatility = predicted_volatility
+)
+# Renommage des colonnes du dataframe forecast_results
+colnames(forecast_results) <- c("PredictedReturns", "LowerBound", "UpperBound", "PredictedVolatility")
+
+# Affichage des résultats avec les nouvelles colonnes
+print(forecast_results)
+
+
+```
+```{r}
+# 6. Tracer les prévisions et les intervalles de confiance
+library(ggplot2)
+
+forecast_results$Date <- seq.Date(from = Sys.Date() + 1, by = "day", length.out = 100)  # Période de prévision (vous pouvez ajuster la date)
+
+# Tracer les rendements prévisionnels et les intervalles de confiance
+ggplot(forecast_results, aes(x = Date)) +
+  geom_line(aes(y = PredictedReturns), color = "blue", size = 1) +
+  geom_ribbon(aes(ymin = LowerBound, ymax = UpperBound), fill = "grey", alpha = 0.3) +
+  labs(title = "Prévisions des Rendements avec Intervalles de Confiance", 
+       x = "Date", 
+       y = "Rendement Prévisionnel") +
+  theme_minimal()
+
+# Tracer la volatilité prévisionnelle
+ggplot(forecast_results, aes(x = Date, y = PredictedVolatility)) +
+  geom_line(color = "red", size = 1) +
+  labs(title = "Prévisions de la Volatilité", 
+       x = "Date", 
+       y = "Volatilité Prévisionnelle") +
+  theme_minimal()
+```
+
 
