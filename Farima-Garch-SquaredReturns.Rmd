@@ -200,9 +200,10 @@ Box.test(garch_residuals, lag = 20, type = "Ljung-Box")
 # Étape 7 : Extraire la volatilité conditionnelle journalière
 volatility_daily <- sigma(garch_fit)
 
+vol <- read.csv("volatilite_estimee.csv")
 # Vérification que les longueurs des données concordent
 if (length(volatility_daily) == nrow(adobe_returns)) {
-  adobe_returns$volatility <- xts(volatility_daily, order.by = index(adobe_returns))
+  vol$SquaredVolatility <- xts(volatility_daily, order.by = index(adobe_returns))
 } else {
   stop("Les longueurs des séries de volatilité et des rendements ne correspondent pas.")
 }
@@ -210,11 +211,12 @@ if (length(volatility_daily) == nrow(adobe_returns)) {
 
 
 ```{r}
-chart_Series(adobe_returns$volatility)
-chart_Series(adobe_returns$ADBE.Adjusted)
+plot.ts(vol$Volatility)
+chart_Series(vol$SquaredVolatility)
+
 
 # Exporter en CSV avec les dates et la volatilité
- write.csv(data.frame(Date = index(adobe_returns), coredata(adobe_returns)), "SquaredReturnsVolatility.csv", row.names = FALSE)
+ write.csv(vol, "volatilite_estimee.csv", row.names = FALSE)
 
 
 ```
