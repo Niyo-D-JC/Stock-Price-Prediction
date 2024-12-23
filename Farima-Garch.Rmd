@@ -20,7 +20,7 @@ library(xts)
 ```{r}
 # Étape 1 : Chargement des données et calcul des rendements
 getSymbols("ADBE", from = "2010-01-01", to = "2024-10-31", src = "yahoo")
-adobe_prices <- Cl(ADBE)
+adobe_prices <- ADBE$ADBE.Adjusted
 adobe_returns <- na.omit(diff(log(adobe_prices)))
 ```
 ## Étape 2 : Analyse graphique
@@ -57,7 +57,7 @@ grid_search_farima <- function(data, max_p = 5, max_q = 2) {
     for (q in 0:max_q) {
       tryCatch({
         # Ajustement du modèle FARIMA
-        model <- arfima(data, order = c(p, 0, q))
+        model <- arfima::arfima(data, order = c(p, 0, q))
         
         # Extraction du AIC
         aic <- AIC(model)
@@ -103,7 +103,7 @@ Le modèle optimal obtenu est un FARIMA(3,d,2) avec d=-0.0277 < 0, ce qui met en
 ## Étape 4 : Sélection du meilleur modèle et vérification des diagnostics
 ```{r}
 # Étape 4 : Sélection du meilleur modèle et vérification des diagnostics
-best_model <- arfima(as.numeric(adobe_returns), order = c(3, 0, 2))
+best_model <- arfima::arfima(as.numeric(adobe_returns), order = c(3, 0, 2))
 
 # Résumé du meilleur modèle
 print(summary(best_model))
@@ -195,7 +195,7 @@ volatility_daily <- sigma(garch_fit)
 
 # Vérification que les longueurs des données concordent
 if (length(volatility_daily) == nrow(adobe_returns)) {
-  adobe_returns$volatility <- xts(volatility_daily, order.by = index(adobe_returns))
+  adobe_returns$Volatility <- xts(volatility_daily, order.by = index(adobe_returns))
 } else {
   stop("Les longueurs des séries de volatilité et des rendements ne correspondent pas.")
 }
@@ -203,11 +203,12 @@ if (length(volatility_daily) == nrow(adobe_returns)) {
 
 
 ```{r}
-chart_Series(adobe_returns$volatility)
-chart_Series(adobe_returns$ADBE.Close)
+chart_Series(adobe_returns$Volatility)
+chart_Series(adobe_returns$ADBE.Adjusted)
+
 
 # Exporter en CSV avec les dates et la volatilité
- write.csv(data.frame(Date = index(adobe_returns), coredata(adobe_returns)), "adobe_returns_with_volatility.csv", row.names = FALSE)
+ write.csv(data.frame(Date = index(adobe_returns), coredata(adobe_returns)), "volatilite_estimee.csv", row.names = FALSE)
 
 
 ```
