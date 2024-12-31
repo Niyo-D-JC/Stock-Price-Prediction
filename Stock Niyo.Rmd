@@ -256,7 +256,7 @@ colnames(data.prohet)[1] <- "ds"
 colnames(data.prohet)[2] <- "y"
 
 # Séparation des données en train et test
-train_end_date <- as.Date("2024-01-30")
+train_end_date <- as.Date("2024-01-01")
 train_data <- data.prohet %>% filter(ds <= train_end_date)
 test_data <- data.prohet %>% filter(ds > train_end_date)
 
@@ -377,7 +377,7 @@ print(contributions)
 ```{r}
 # Graphique des contributions
 plot_contributions <- function(contributions_df) {
-  ggplot(contributions_df[4:30,], aes(x = reorder(Variable, Contribution), y = Contribution, fill = Contribution)) +
+  ggplot(contributions_df, aes(x = reorder(Variable, Contribution), y = Contribution, fill = Contribution)) +
     geom_bar(stat = "identity") +
     coord_flip() +
     scale_fill_gradient(low = "blue", high = "red") +
