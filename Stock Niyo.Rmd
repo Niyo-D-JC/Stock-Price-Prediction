@@ -132,6 +132,14 @@ combined_df <- merge(combined_df, data, by = "Date", all.x = TRUE)
 ```
 
 ```{r}
+combined_df$sovereign_debt_crisis <- as.integer(combined_df$Date >= as.Date("2010-01-01") & combined_df$Date <= as.Date("2012-12-31"))
+combined_df$oil_shock <- as.integer(combined_df$Date >= as.Date("2014-01-01") & combined_df$Date <= as.Date("2016-12-31"))
+combined_df$trade_war <- as.integer(combined_df$Date >= as.Date("2018-01-01") & combined_df$Date <= as.Date("2019-12-31"))
+combined_df$covid_pandemic <- as.integer(combined_df$Date >= as.Date("2020-01-01") & combined_df$Date <= as.Date("2022-12-31"))
+combined_df$war_ukraine <- as.integer(combined_df$Date >= as.Date("2022-02-24"))
+```
+
+```{r}
 # Imputation des valeurs manquantes dans GSPC.Close et FCHI.Close avec la valeur précédente
 combined_df <- na.locf(combined_df, na.rm = FALSE)
 
@@ -229,11 +237,7 @@ spec.pgram(na.omit(combined_df$LNS12032195), log = "no", main = "Spectrum of the
 ```
 
 ```{r}
-combined_df$sovereign_debt_crisis <- as.integer(combined_df$Date >= as.Date("2010-01-01") & combined_df$Date <= as.Date("2012-12-31"))
-combined_df$oil_shock <- as.integer(combined_df$Date >= as.Date("2014-01-01") & combined_df$Date <= as.Date("2016-12-31"))
-combined_df$trade_war <- as.integer(combined_df$Date >= as.Date("2018-01-01") & combined_df$Date <= as.Date("2019-12-31"))
-combined_df$covid_pandemic <- as.integer(combined_df$Date >= as.Date("2020-01-01") & combined_df$Date <= as.Date("2022-12-31"))
-combined_df$war_ukraine <- as.integer(combined_df$Date >= as.Date("2022-02-24"))
+
 ```
 
 ### Prophet
@@ -336,36 +340,46 @@ rmse <- function(actual, predicted) {
 
 ```{r}
 
-variable_contribution <- function(model, data, test_data, train_end_date) {
+variable_contribution <- function(model, data, test_data, train_end_date, n_permutations = 10) {
+
   # Prédiction de base (toutes les variables)
   future <- data.frame(ds = seq.Date(from = min(test_data$ds), to = max(test_data$ds), by = "day"))
   future <- left_join(future, data, by = 'ds') %>% na.omit()
   full_forecast <- predict(model, future)
   base_rmse <- rmse(test_data$y, full_forecast$yhat)
-  
-  # Contribution par permutation de chaque variable
+
+  # Initialiser les contributions moyennes
   contributions <- list()
-  
+
   for (var in colnames(data)[3:ncol(data)]) {  # Ignorer ds et y
-    permuted_data <- future
-    permuted_data[[var]] <- sample(permuted_data[[var]])  # Permutation de la colonne
-    
-    # Prédiction avec la variable permutée
-    permuted_forecast <- predict(model, permuted_data)
-    permuted_rmse <- rmse(test_data$y, permuted_forecast$yhat)
-    
-    # Contribution = Différence de RMSE
-    contributions[[var]] <- permuted_rmse - base_rmse
+    permuted_rmse_list <- c()
+
+    for (i in 1:n_permutations) {
+      # Permutation de la variable
+      permuted_data <- future
+      permuted_data[[var]] <- sample(permuted_data[[var]])
+
+      # Prédiction avec la variable permutée
+      permuted_forecast <- predict(model, permuted_data)
+      permuted_rmse <- rmse(test_data$y, permuted_forecast$yhat)
+
+      # Stocker la différence de RMSE
+      permuted_rmse_list <- c(permuted_rmse_list, permuted_rmse - base_rmse)
+    }
+
+    # Moyenne des contributions
+    contributions[[var]] <- mean(permuted_rmse_list)
   }
-  
-  # Retourner les contributions
+
+  # Retourner les contributions moyennes
   contributions_df <- data.frame(
     Variable = names(contributions),
     Contribution = unlist(contributions)
   ) %>% arrange(desc(Contribution))
-  
+
   return(contributions_df)
 }
+
 ```
 
 ```{r}
