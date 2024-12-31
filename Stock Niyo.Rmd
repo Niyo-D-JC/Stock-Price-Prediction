@@ -20,6 +20,7 @@ library(dplyr)
 library(zoo) # Pour imputation
 library(TSA)
 library(extRemes)
+library(tseries)
 ```
 
 ```{r}
@@ -117,16 +118,22 @@ macro_sentiment$Quarter <- paste0("Q", month(macro_sentiment$DATE), "-", year(ma
 ```
 
 ```{r}
-combined_df <- merge(df_stock, macro_sentiment, by = "Quarter", all = TRUE)
+combined_df <- merge(df_stock, macro_sentiment, by = "Quarter", all.x = TRUE)
 combined_df <- combined_df[, !(colnames(combined_df) %in% c("Quarter", "DATE"))]
 combined_df$Date <- as.Date(combined_df$Date)
 combined_df <- combined_df[order(combined_df$Date), ]
 ```
 
 ```{r}
+data <- read.csv(file.choose())
+data$Date <- as.Date(data$Date)
+data <- data[, c("Date", "Volatility", "SquaredVolatility")]
+combined_df <- merge(combined_df, data, by = "Date", all.x = TRUE)
+```
+
+```{r}
 # Imputation des valeurs manquantes dans GSPC.Close et FCHI.Close avec la valeur précédente
-combined_df$GSPC.Close <- na.locf(combined_df$GSPC.Close, na.rm = FALSE)
-combined_df$FCHI.Close <- na.locf(combined_df$FCHI.Close, na.rm = FALSE)
+combined_df <- na.locf(combined_df, na.rm = FALSE)
 
 missing_GSPC_after <- sum(is.na(combined_df$GSPC.Close))
 missing_FCHI_after <- sum(is.na(combined_df$FCHI.Close))
@@ -167,13 +174,219 @@ plot(decomp)
 ```
 
 ```{r}
-pacf(na.omit(combined_df$Rend))
+ret <- na.omit(combined_df$Rend)**2
+stats::acf(ret)
 ```
 
 ```{r}
 summary(combined_df$Rend)
 ```
 
+### Analyse des covariables
+
 ```{r}
-acf(data$ADBE.Adjusted, lag.max = 50)
+library(quantmod)
+library(dplyr)
+library(corrplot)
+```
+
+```{r}
+# Créer un tableau contenant moyenne, min, max et écart-type
+summary_with_sd <- data.frame(
+  Moyenne = sapply(combined_df, function(x) if(is.numeric(x)) mean(x, na.rm = TRUE) else NA),
+  Min = sapply(combined_df, function(x) if(is.numeric(x)) min(x, na.rm = TRUE) else NA),
+  Max = sapply(combined_df, function(x) if(is.numeric(x)) max(x, na.rm = TRUE) else NA),
+  ÉcartType = sapply(combined_df, function(x) if(is.numeric(x)) sd(x, na.rm = TRUE) else NA)
+)
+
+print(summary_with_sd)
+```
+
+```{r}
+# Matrice de corrélation
+cor_matrix <- cor(combined_df[, -1], use = "pairwise.complete.obs")
+
+# Afficher la matrice sous forme graphique
+corrplot(cor_matrix, method = "color", type = "upper", tl.col = "black", tl.cex = 0.8)
+```
+
+```{r}
+# Tracer les relations entre Close et d'autres indicateurs
+plot(combined_df$EMVMACROBUS, combined_df$MA10Day, main = "Close vs MA10Day", xlab = "Close", ylab = "MA10Day")
+plot(combined_df$EMVMACROBUS, combined_df$RSI14Day, main = "Close vs RSI14Day", xlab = "Close", ylab = "RSI14Day")
+
+# Exemple de graphique temporel
+plot(combined_df$Date, combined_df$Close, type = "l", main = "Prix de Clôture dans le Temps", xlab = "Date", ylab = "Close")
+lines(combined_df$Date, combined_df$SMA.4, col = "blue", lwd = 2)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+spec.pgram(na.omit(combined_df$Rend), log = "no", main = "Spectrum of Return")
+spec.pgram(na.omit(combined_df$SMA.4), log = "no", main = "Spectrum of the SMA Variable")
+spec.pgram(na.omit(combined_df$signal), log = "no", main = "Spectrum of the Signal Variable")
+spec.pgram(na.omit(combined_df$LNS12032195), log = "no", main = "Spectrum of the LNS12032195 Variable")
+```
+
+```{r}
+combined_df$sovereign_debt_crisis <- as.integer(combined_df$Date >= as.Date("2010-01-01") & combined_df$Date <= as.Date("2012-12-31"))
+combined_df$oil_shock <- as.integer(combined_df$Date >= as.Date("2014-01-01") & combined_df$Date <= as.Date("2016-12-31"))
+combined_df$trade_war <- as.integer(combined_df$Date >= as.Date("2018-01-01") & combined_df$Date <= as.Date("2019-12-31"))
+combined_df$covid_pandemic <- as.integer(combined_df$Date >= as.Date("2020-01-01") & combined_df$Date <= as.Date("2022-12-31"))
+combined_df$war_ukraine <- as.integer(combined_df$Date >= as.Date("2022-02-24"))
+```
+
+### Prophet
+
+```{r}
+library(prophet)
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# Préparation des données
+data.prohet <- combined_df %>% select(Date, Close, Volume, SMA, rsi, rsi.1, rsi.2, rsi.3, SMA.1, SMA.2, SMA.3, EMA, 
+                     Close.1, High.1, macd, signal, obv, SMA.4, GSPC.Close, FCHI.Close, 
+                     EMVMACROBUS, CPIAUCSL, EXPINF1YR, LNS12032195, UMCSENT, Volatility, SquaredVolatility, sovereign_debt_crisis, oil_shock, trade_war, covid_pandemic, war_ukraine)%>%
+  na.omit()  # Avec les calculs mobiles, certaines variables sont vides
+
+# Renommer pour Prophet
+colnames(data.prohet)[1] <- "ds"
+colnames(data.prohet)[2] <- "y"
+
+# Séparation des données en train et test
+train_end_date <- as.Date("2024-01-30")
+train_data <- data.prohet %>% filter(ds <= train_end_date)
+test_data <- data.prohet %>% filter(ds > train_end_date)
+
+# Création et ajustement du modèle Prophet
+model <- prophet()
+model <- add_regressor(model, 'Volume')
+model <- add_regressor(model, 'SMA')
+model <- add_regressor(model, 'rsi')
+model <- add_regressor(model, 'rsi.1')
+model <- add_regressor(model, 'rsi.2')
+model <- add_regressor(model, 'rsi.3')
+model <- add_regressor(model, 'SMA.1')
+model <- add_regressor(model, 'SMA.2')
+model <- add_regressor(model, 'SMA.3')
+model <- add_regressor(model, 'EMA')
+model <- add_regressor(model, 'Close.1')
+model <- add_regressor(model, 'High.1')
+model <- add_regressor(model, 'macd')
+model <- add_regressor(model, 'signal')
+model <- add_regressor(model, 'obv')
+model <- add_regressor(model, 'SMA.4')
+model <- add_regressor(model, 'GSPC.Close')
+model <- add_regressor(model, 'FCHI.Close')
+model <- add_regressor(model, 'EMVMACROBUS')
+model <- add_regressor(model, 'CPIAUCSL')
+model <- add_regressor(model, 'EXPINF1YR')
+model <- add_regressor(model, 'LNS12032195')
+model <- add_regressor(model, 'UMCSENT')
+model <- add_regressor(model, 'Volatility')
+model <- add_regressor(model, 'SquaredVolatility')
+model <- add_regressor(model, 'sovereign_debt_crisis')
+model <- add_regressor(model, 'oil_shock')
+model <- add_regressor(model, 'trade_war')
+model <- add_regressor(model, 'covid_pandemic')
+model <- add_regressor(model, 'war_ukraine')
+```
+
+```{r}
+model <- fit.prophet(model, train_data)
+```
+
+```{r}
+# Préparation des prédictions
+future <- data.frame(ds = seq.Date(from = min(test_data$ds), to = max(test_data$ds), by = "day"))
+future <- left_join(future, data.prohet, by = 'ds') %>% na.omit()
+forecast <- predict(model, future)
+```
+
+```{r}
+# Affichage des résultats
+plot(model, forecast)
+prophet_plot_components(model, forecast)
+```
+
+```{r}
+# Évaluation des erreurs
+forecast_test <- forecast %>% filter(ds > train_end_date)
+test_data <- test_data %>% select(ds, y)
+
+results <- left_join(forecast_test %>% select(ds, yhat), test_data, by = 'ds')
+
+# Calcul des erreurs
+rmse <- sqrt(mean((results$yhat - results$y)^2, na.rm = TRUE))
+mae <- mean(abs(results$yhat - results$y), na.rm = TRUE)
+mape <- mean(abs((results$yhat - results$y) / results$y), na.rm = TRUE) * 100
+
+cat("RMSE:", rmse, "\n")
+cat("MAE:", mae, "\n")
+cat("MAPE:", mape, "%\n")
+```
+
+```{r}
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2, na.rm = TRUE))
+}
+```
+
+```{r}
+
+variable_contribution <- function(model, data, test_data, train_end_date) {
+  # Prédiction de base (toutes les variables)
+  future <- data.frame(ds = seq.Date(from = min(test_data$ds), to = max(test_data$ds), by = "day"))
+  future <- left_join(future, data, by = 'ds') %>% na.omit()
+  full_forecast <- predict(model, future)
+  base_rmse <- rmse(test_data$y, full_forecast$yhat)
+  
+  # Contribution par permutation de chaque variable
+  contributions <- list()
+  
+  for (var in colnames(data)[3:ncol(data)]) {  # Ignorer ds et y
+    permuted_data <- future
+    permuted_data[[var]] <- sample(permuted_data[[var]])  # Permutation de la colonne
+    
+    # Prédiction avec la variable permutée
+    permuted_forecast <- predict(model, permuted_data)
+    permuted_rmse <- rmse(test_data$y, permuted_forecast$yhat)
+    
+    # Contribution = Différence de RMSE
+    contributions[[var]] <- permuted_rmse - base_rmse
+  }
+  
+  # Retourner les contributions
+  contributions_df <- data.frame(
+    Variable = names(contributions),
+    Contribution = unlist(contributions)
+  ) %>% arrange(desc(Contribution))
+  
+  return(contributions_df)
+}
+```
+
+```{r}
+# Utilisation de la fonction
+contributions <- variable_contribution(model, data.prohet, test_data, train_end_date)
+print(contributions)
+```
+
+```{r}
+# Graphique des contributions
+plot_contributions <- function(contributions_df) {
+  ggplot(contributions_df[4:30,], aes(x = reorder(Variable, Contribution), y = Contribution, fill = Contribution)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    scale_fill_gradient(low = "blue", high = "red") +
+    labs(title = "Contribution des variables dans le modèle Prophet",
+         x = "Variable",
+         y = "Contribution (Différence de RMSE)") +
+    theme_minimal()
+}
+
+# Affichage du graphique
+plot_contributions(contributions)
 ```
