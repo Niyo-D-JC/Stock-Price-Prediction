@@ -8,6 +8,10 @@ from multiprocessing import Pool
 
 from components.menu import *
 from components.analyse import Analyse
+from components.techn import Techn
+from components.model import Model
+from components.calibration import Calibration
+
 import plotly.express as px
 import pandas as pd
 from collections import Counter
@@ -25,6 +29,9 @@ app.index_string = INDEX_CONFIG
 
 # Initialisation des différentes sections de l'application via des objets personnalisés
 analyse = Analyse()      
+tech = Techn() 
+model = Model() 
+calibration = Calibration() 
 
 CONTENT_STYLE = {
         "margin-left": "18rem",
@@ -53,11 +60,11 @@ def render_page_content(pathname):
     if pathname == f"{path}":
         return analyse.render() 
     elif pathname == f"{path}techn": 
-        return analyse.render() 
+        return tech.render() 
     elif pathname == f"{path}model": 
-        return analyse.render() 
+        return model.render() 
     elif pathname == f"{path}calibration": 
-        return analyse.render() 
+        return calibration.render() 
     else:
         return analyse.render()             # Page par défaut (analyse) si le chemin n'est pas reconnu
 
