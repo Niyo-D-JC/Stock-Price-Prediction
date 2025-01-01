@@ -60,7 +60,7 @@ class Menu:
                         vertical=True,
                         pills=True,
                     ),
-                     html.Footer(f"© {self.get_current_year()} A3 ENSAI", style={'text-align': 'center', 'position': 'absolute', 'color':'#d10737', 'font-weight':'bold',
+                     html.Footer(f"© {self.get_current_year()} 3A ENSAI", style={'text-align': 'center', 'position': 'absolute', 'color':'#d10737', 'font-weight':'bold',
                                                                                  'bottom': '20px', 'left': '50%', 'transform': 'translateX(-50%)', 
                                                                                  'width': '100%', 'margin': 'auto'})
                 ],
