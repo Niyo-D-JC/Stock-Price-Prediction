@@ -127,7 +127,7 @@ combined_df <- combined_df[order(combined_df$Date), ]
 ```{r}
 data <- read.csv(file.choose())
 data$Date <- as.Date(data$Date)
-data <- data[, c("Date", "Volatility", "SquaredVolatility")]
+data <- data[, c("Date", "Sigma", "Sigma2")]
 combined_df <- merge(combined_df, data, by = "Date", all.x = TRUE)
 ```
 
@@ -252,7 +252,7 @@ library(ggplot2)
 # Préparation des données
 data.prohet <- combined_df %>% select(Date, Close, Volume, SMA, rsi, rsi.1, rsi.2, rsi.3, SMA.1, SMA.2, SMA.3, EMA, 
                      Close.1, High.1, macd, signal, obv, SMA.4, GSPC.Close, FCHI.Close, 
-                     EMVMACROBUS, CPIAUCSL, EXPINF1YR, LNS12032195, UMCSENT, Volatility, SquaredVolatility, sovereign_debt_crisis, oil_shock, trade_war, covid_pandemic, war_ukraine)%>%
+                     EMVMACROBUS, CPIAUCSL, EXPINF1YR, LNS12032195, UMCSENT, Sigma, Sigma2, sovereign_debt_crisis, oil_shock, trade_war, covid_pandemic, war_ukraine)%>%
   na.omit()  # Avec les calculs mobiles, certaines variables sont vides
 
 # Renommer pour Prophet
@@ -289,8 +289,8 @@ model <- add_regressor(model, 'CPIAUCSL')
 model <- add_regressor(model, 'EXPINF1YR')
 model <- add_regressor(model, 'LNS12032195')
 model <- add_regressor(model, 'UMCSENT')
-model <- add_regressor(model, 'Volatility')
-model <- add_regressor(model, 'SquaredVolatility')
+model <- add_regressor(model, 'Sigma')
+model <- add_regressor(model, 'Sigma2')
 model <- add_regressor(model, 'sovereign_debt_crisis')
 model <- add_regressor(model, 'oil_shock')
 model <- add_regressor(model, 'trade_war')
@@ -412,45 +412,46 @@ Rend <- na.omit(combined_df$Rend)
 ```
 
 ```{r}
-# Définir la fonction de recherche de modèle optimal
 grid_search <- function(data, max_pq_farima = 3, max_pq_garch = 3) {
-  best_aic <- Inf  # Initialiser le meilleur AIC
-  best_model <- NULL
-  best_params <- list()
+  # Initialiser un dataframe pour stocker les résultats
+  results <- data.frame(
+    p_farima = integer(),
+    q_farima = integer(),
+    p_garch = integer(),
+    q_garch = integer(),
+    aic = numeric(),
+    stringsAsFactors = FALSE
+  )
 
   # Boucle pour p et q de FARIMA
-  for (p_farima in 0:max_pq_farima) {
-    for (q_farima in 0:max_pq_farima) {
-      
+  for (p_farima in 1:max_pq_farima) {
+    for (q_farima in 1:max_pq_farima) {
       # Boucle pour p et q de GARCH
-      for (p_garch in 0:max_pq_garch) {
-        for (q_garch in 0:max_pq_garch) {
+      for (p_garch in 1:max_pq_garch) {
+        for (q_garch in 1:max_pq_garch) {
           # Spécification du modèle
           spec <- ugarchspec(
             variance.model = list(model = "sGARCH", garchOrder = c(p_garch, q_garch)),
             mean.model = list(armaOrder = c(p_farima, q_farima), include.mean = TRUE, arfima = TRUE),
             distribution.model = "norm"  # Distribution normale
           )
-          
+
           # Essayer d’ajuster le modèle et capturer les erreurs
           fit <- tryCatch({
             ugarchfit(spec = spec, data = data)
           }, error = function(e) NULL)
-          
-          # Vérifier si l’ajustement est valide
+
+          # Si l’ajustement est valide, calculer l’AIC et ajouter au dataframe
           if (!is.null(fit)) {
-            aic <- -2*fit@fit[["LLH"]] + 2*(length(coef(fit))-1)  # Extraire AIC
-            
-            # Mise à jour du meilleur modèle
-            if (aic < best_aic) {
-              best_aic <- aic
-              best_model <- fit
-              best_params <- list(
-                p_farima = p_farima,
-                q_farima = q_farima,
-                p_garch = p_garch,
-                q_garch = q_garch
-              )
+            aic <- (-2*fit@fit[["LLH"]]) + 2*(length(coef(fit))-1)  # Extraire AIC
+            if(length(aic) != 0){
+              results <- rbind(results, data.frame(
+              p_farima = p_farima,
+              q_farima = q_farima,
+              p_garch = p_garch,
+              q_garch = q_garch,
+              aic = aic
+            ))
             }
           }
         }
@@ -458,64 +459,85 @@ grid_search <- function(data, max_pq_farima = 3, max_pq_garch = 3) {
     }
   }
 
-  # Retourner les résultats
-  return(list(best_model = best_model, best_params = best_params, best_aic = best_aic))
+  # Trier les résultats par AIC
+  results <- results[order(results$aic), ]
+
+  # Retourner le dataframe trié
+  return(results)
 }
-
 ```
 
 ```{r}
-# Exécuter la recherche
+# Exécuter la recherche (Attention ça dure)
 results <- grid_search(data = Rend, max_pq_farima = 3, max_pq_garch = 3)
-
-# Résultats optimaux
-cat("Meilleurs paramètres:\n")
-print(results$best_params)
-cat("\nAIC Optimal:", results$best_aic, "\n")
-
-# Modèle optimal
-best_model <- results$best_model
-```
-
-```{r}
-# Afficher le résumé du modèle optimal
-best_model
-
-# Extraire et afficher les coefficients
-coef(best_model)
-
-# Extraire la volatilité conditionnelle
-volatility <- sigma(best_model)
-
-# Tracer la volatilité
-plot(volatility, type = "l", col = "blue", main = "Volatilité Conditionnelle (GARCH)", ylab = "Volatilité")
-lines(Rend, col = "gray")
-
-```
-
-```{r}
-# Résidus standardisés
-residuals <- residuals(best_model, standardize = TRUE)
-
-# Test de Ljung-Box pour autocorrélation des résidus
-Box.test(residuals, type = "Ljung-Box")
-
-# Test ARCH sur les résidus
-library(FinTS)
-ArchTest(residuals)
 ```
 
 ```{r}
 # Définir la spécification du modèle ARFIMA + GARCH
 spec <- ugarchspec(
-  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),  # GARCH(1,1)
-  mean.model = list(armaOrder = c(1, 1), include.mean = TRUE, archm = FALSE, arfima = TRUE),  # ARFIMA(1,d,1)
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 1)),  # GARCH(2,1)
+  mean.model = list(armaOrder = c(3, 1), include.mean = TRUE, archm = FALSE, arfima = TRUE),  # FARIMA(3,d,1)
   distribution.model = "norm"  # Distribution normale
 )
 
 # Ajuster le modèle sur les données
-fit <- ugarchfit(spec = spec, data = na.omit(Rend))
+best_model <- ugarchfit(spec = spec, data = na.omit(Rend))
 
 # Résultats de l'ajustement
-fit
+best_model
+```
+
+```{r}
+volatility <- sigma(best_model)
+
+# Tracer la volatilité
+plot(volatility, type = "l", col = "blue", main = "Volatilité Conditionnelle (GARCH)", ylab = "Volatilité")
+lines(Rend, col = "gray")
+```
+
+```{r}
+volatility <- c(NA, volatility)
+combined_df$Sigma <- volatility
+```
+
+```{r}
+## Pour le carré du rendement (Attention ça dure)
+results2 <- grid_search(data = Rend**2, max_pq_farima = 3, max_pq_garch = 3)
+```
+
+```{r}
+# Définir la spécification du modèle ARFIMA + GARCH
+spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 3)),  # GARCH(2,3)
+  mean.model = list(armaOrder = c(3, 1), include.mean = TRUE, archm = FALSE, arfima = TRUE),  # FARIMA(3,d,2)
+  distribution.model = "norm"  # Distribution normale
+)
+
+# Ajuster le modèle sur les données
+best_model_sq <- ugarchfit(spec = spec, data = Rend**2)
+
+# Résultats de l'ajustement
+best_model_sq
+```
+
+```{r}
+volatility_sq <- sigma(best_model_sq)
+
+# Tracer la volatilité
+plot(volatility_sq, type = "l", col = "blue", main = "Volatilité Conditionnelle (GARCH)", ylab = "Volatilité")
+lines(Rend, col = "gray")
+```
+
+```{r}
+volatility_sq <- c(NA, volatility_sq)
+combined_df$Sigma2 <- volatility_sq
+```
+
+```{r}
+# Sélectionner les colonnes désirées
+data_to_export <- combined_df[, c("Date", "Sigma2", "Sigma")]
+
+# Exporter le dataframe dans un fichier CSV
+write.csv(data_to_export, "volatilite_estimee.csv", row.names = FALSE)
+
 ```
