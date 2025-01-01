@@ -51,7 +51,13 @@ app.layout = html.Div(
 def render_page_content(pathname):
     # Affiche le rendu correspondant à l'URL, sinon retourne l'analyse par défaut
     if pathname == f"{path}":
-        return analyse.render()          
+        return analyse.render() 
+    elif pathname == f"{path}techn": 
+        return analyse.render() 
+    elif pathname == f"{path}model": 
+        return analyse.render() 
+    elif pathname == f"{path}calibration": 
+        return analyse.render() 
     else:
         return analyse.render()             # Page par défaut (analyse) si le chemin n'est pas reconnu
 
@@ -62,5 +68,5 @@ def render_page_content(pathname):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', debug=True)
+    app.run(debug=True)
     

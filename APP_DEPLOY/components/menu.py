@@ -7,7 +7,7 @@ INDEX_CONFIG = '''
 <html>
     <head>
         <title>Open Bank Monitor</title>
-        <link rel="icon" type="image/png" href="https://www.credit-conso.org/wp-content/uploads/2023/07/ogo_Cofidis.png">  <!-- Référence à votre favicon -->
+        <link rel="icon" type="image/png" href="https://static.cdnlogo.com/logos/a/90/adobe.png">  <!-- Référence à votre favicon -->
         {%metas%}
         {%css%}
     </head>
@@ -42,23 +42,20 @@ class Menu:
     
     def render(self):
         return html.Div(
-                [   dbc.CardImg(src="https://www.credit-conso.org/wp-content/uploads/2023/07/ogo_Cofidis.png", top=True),
+                [   dbc.CardImg(src="https://static.cdnlogo.com/logos/a/90/adobe.png", top=True),
                  
-                    html.H4("Open Bank", className="display-6", style={'font-weight':'bold'}),
+                    html.H4("Stock Price", className="display-6", style={'font-weight':'bold'}),
                     html.Hr(),
                     html.P(
-                        "Monitoring SyHo", className="lead", style={'text-align':'center'}
+                        "Adobe Prediction", className="lead", style={'text-align':'center'}
                     ),
                     html.Br(),
                     dbc.Nav(
                         [
-                            dbc.NavLink("Analyse", href=f"{self.path}", active="exact"),
-                            dbc.NavLink("Banque", href=f"{self.path}bank", active="exact"),
-                            dbc.NavLink("Mots Clés", href=f"{self.path}motscles", active="exact"),
-                            dbc.NavLink("Type d'Opération", href=f"{self.path}type", active="exact"),
-                            dbc.NavLink("Catégorie", href=f"{self.path}categorie", active="exact"),
-                            dbc.NavLink("Non Catégorisées", href=f"{self.path}noncategorie", active="exact"),
-                            dbc.NavLink("Contrôle", href=f"{self.path}controle", active="exact"),
+                            dbc.NavLink("Fundamental Analysis", href=f"{self.path}", active="exact"),
+                            dbc.NavLink("Technical Analysis", href=f"{self.path}techn", active="exact"),
+                            dbc.NavLink("Model Adobe Deployed", href=f"{self.path}model", active="exact"),
+                            dbc.NavLink("Calibration by News", href=f"{self.path}calibration", active="exact"),
                         ],
                         vertical=True,
                         pills=True,

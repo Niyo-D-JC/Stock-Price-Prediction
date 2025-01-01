@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 
-class Analyse:
+class Calibration:
     def __init__(self):
         
         self.button_mesure = html.Div(
@@ -30,6 +30,6 @@ class Analyse:
         
     def render(self):
         row = html.Div(
-                "Analyse"
+                "Calibration"
             )
         return row
