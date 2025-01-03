@@ -7,7 +7,7 @@ INDEX_CONFIG = '''
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Open Bank Monitor</title>
+        <title>Adobe Price Prophet</title>
         <link rel="icon" type="image/png" href="https://static.cdnlogo.com/logos/a/90/adobe.png">  <!-- Référence à votre favicon -->
         {%metas%}
         {%css%}
