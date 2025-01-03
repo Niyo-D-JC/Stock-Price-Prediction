@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 
-from dash import html, dcc
+from dash import html, dcc, dash_table
 import dash_bootstrap_components as dbc
 import pandas as pd
 import numpy as np
@@ -12,23 +12,27 @@ class Techn:
         self.button_mesure = html.Div(
                 [
                     dbc.RadioItems(
-                        id="radios_mesure-analyse",
+                        id="radio-analyse",
                         className="btn-group",
                         inputClassName="btn-check",
                         labelClassName="btn btn-outline-primary",
                         labelCheckedClassName="active",
                         options=[
-                            {"label": "Rendement", "value": 'rend'},
-                            {"label": "Normalisation", "value": 'norm'},
+                            {"label": "Log Yield", "value": 'rend'},
+                            {"label": "Standardization", "value": 'norm'},
                         ],
-                        value='count',
+                        value='rend',
                     )
                 ],
                 className="radio-group",
             )
+        
         self.index_select = dbc.Select(
-            id='index-select'
+            id='index-select',
+            options=[{'label': 'S&P 500', 'value': 'SP'}, {'label': 'CAC 40', 'value': 'CAC'}],
+            value='SP'
         )
+
         
     def date_gestion(self):
         return dcc.RangeSlider(
@@ -39,7 +43,7 @@ class Techn:
     def render(self):
         row = html.Div(
                 [
-                    dbc.Row(dbc.Col(html.H5("Technical Analysis", className="display-7", style={'font-weight':'bold', 'color':'#d10737'}))),
+                    dbc.Row(dbc.Col(html.H4("Technical Analysis", className="display-7", style={'font-weight':'bold', 'color':'#d10737'}))),
                     dbc.Row(
                         [
                             # Colonne de gauche avec le RangeSlider et un graphique
@@ -49,9 +53,9 @@ class Techn:
                     ),
                     dbc.Row(
                         [
-                            dbc.Col([html.Br(), "dcc.Graph(id='pie-chart-bank')"], width=6),
+                            dbc.Col([html.Br(), dcc.Graph(id='line-chart')], width=6),
                             # Colonne de droite avec une table de données filtrable
-                            dbc.Col([html.Br(), """dash_table.DataTable(id="data-table", filter_action="native", filter_options={"placeholder_text": "Filtrer..."}, page_size=10)"""], width=6),
+                            dbc.Col([html.Br(), dash_table.DataTable(id="data-table", filter_action="native", filter_options={"placeholder_text": "Filtrer..."}, page_size=10)], width=6),
                         ], style={'height': '400px'}
                     ),
                 ]
