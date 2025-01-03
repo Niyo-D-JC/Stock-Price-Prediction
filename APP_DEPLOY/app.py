@@ -133,7 +133,7 @@ def render_page_content(pathname):
 
 
 
-############################ ANALYSE ########################################
+############################ ANALYSE TECHNIQUE #################################
 
 @app.callback(
     Output('year-range-slider', 'min'),
@@ -238,6 +238,27 @@ def update_graph_and_table(year_range):
     table_data = filtered_data[['DATE'] + columns_to_normalize].to_dict('records')
 
     return fig, table_data, [{"name": i, "id": i} for i in ['DATE'] + columns_to_normalize]
+
+
+############################ MODELE DEPLOYE #################################
+
+@app.callback(
+    Output('predict-graph', 'figure'),
+    [Input('load-data-button', 'n_clicks')]
+)
+def update_adobe_predict(n_clicks):
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatter(x=adobe_data.index, y=adobe_data['Close'], mode='lines', name='Close'))
+
+    # Ajouter une barre verticale pour la date d'aujourd'hui
+    today = datetime.today().date()
+    fig.add_vline(x=today, line_width=2, line_dash="dash", line_color="red")
+    
+    fig.update_layout(title='Adobe Stock Prediction', xaxis_rangeslider_visible=False)
+    return fig
+
 
 if __name__ == '__main__':
     app.run(debug=True)
