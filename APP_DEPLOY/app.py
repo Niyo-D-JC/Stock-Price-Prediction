@@ -22,8 +22,11 @@ import time
 
 # Initialisation du chemin permettant le lancement de l'application
 # Définition du chemin de base pour l'application Dash en utilisant une variable d'environnement pour l'utilisateur
+
+FONT_AWESOME = "https://use.fontawesome.com/releases/v5.10.2/css/all.css"
+
 path = f"/"
-app = Dash(__name__, requests_pathname_prefix=path, external_stylesheets=[dbc.themes.BOOTSTRAP], suppress_callback_exceptions = True)
+app = Dash(__name__, requests_pathname_prefix=path, external_stylesheets=[dbc.themes.BOOTSTRAP, FONT_AWESOME], suppress_callback_exceptions = True)
 
 app.index_string = INDEX_CONFIG
 
@@ -38,7 +41,6 @@ CONTENT_STYLE = {
         "margin-right": "2rem",
         "padding": "2rem 1rem",
     }
-
 
 sidebar = Menu(path).render()
 content =  dbc.Spinner(html.Div(id="page-content", style=CONTENT_STYLE), spinner_style={"width": "3rem", "height": "3rem"})

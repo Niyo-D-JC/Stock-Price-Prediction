@@ -2,6 +2,7 @@ from dash import html
 import dash_bootstrap_components as dbc
 from datetime import datetime
 
+
 INDEX_CONFIG = '''
 <!DOCTYPE html>
 <html>
