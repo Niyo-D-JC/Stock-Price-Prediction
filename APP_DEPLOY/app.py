@@ -243,7 +243,7 @@ def update_graph_and_table(year_range):
 ############################ MODELE DEPLOYE #################################
 
 @app.callback(
-    Output('predict-graph', 'figure'),
+    [Output('predict-graph', 'figure'),  Output('predict-table', 'data'), Output('predict-table', 'columns')],
     [Input('load-data-button', 'n_clicks')]
 )
 def update_adobe_predict(n_clicks):
@@ -255,9 +255,12 @@ def update_adobe_predict(n_clicks):
     # Ajouter une barre verticale pour la date d'aujourd'hui
     today = datetime.today().date()
     fig.add_vline(x=today, line_width=2, line_dash="dash", line_color="red")
-    
+
     fig.update_layout(title='Adobe Stock Prediction', xaxis_rangeslider_visible=False)
-    return fig
+
+    table_data = adobe_data[['Close', 'High', 'Low', 'Open', 'Volume']].to_dict('records')
+
+    return fig , table_data, [{"name": i, "id": i} for i in ['Close', 'High', 'Low', 'Open', 'Volume']]
 
 
 if __name__ == '__main__':
