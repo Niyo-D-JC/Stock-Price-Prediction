@@ -43,12 +43,12 @@ class Analyse:
                                         dbc.ListGroup([
                                             dbc.ListGroupItem("Financial Performance", active=True),
                                             dbc.ListGroupItem("Revenue Growth: 12%"),
-                                            dbc.ListGroupItem("Profit Margins: 35%"),
+                                            dbc.ListGroupItem("Profit Margins: 30.51%"),
                                             dbc.ListGroupItem("EPS: $14.25"),
                                             dbc.ListGroupItem("FCF: $6.8B"),
                                             dbc.ListGroupItem("ROE: 29%"),
-                                            dbc.ListGroupItem("P/E Ratio: 28"),
-                                            dbc.ListGroupItem("Total Assets: $27B"),
+                                            dbc.ListGroupItem("P/E Ratio: 35.57"),
+                                            dbc.ListGroupItem("Total Assets: $29.83B"),
                                             dbc.ListGroupItem("Dividend Yield: N/A"),
                                         ])
                                     ], width=6),
@@ -61,7 +61,7 @@ class Analyse:
                                             dbc.ListGroupItem("Debt/Equity: 0.25"),
                                             dbc.ListGroupItem("R&D: $2.2B"),
                                             dbc.ListGroupItem("Retention: 90%"),
-                                            dbc.ListGroupItem("Employees: 29,000"),
+                                            dbc.ListGroupItem("Employees: 29 945"),
                                             dbc.ListGroupItem("CEO Tenure: 6 years"),
                                             dbc.ListGroupItem("Customer Base: 26M+"),
                                             dbc.ListGroupItem("Sustainability Rating: A"),
@@ -98,15 +98,15 @@ class Analyse:
     def notif_time_line(self):
         
         list_group = html.Div([
-                        dbc.Row([dbc.Col(html.H4("About", className="my-4", style={'font-weight':'bold', 'color':'#d10737'}), width=6)]),
+                        dbc.Row([dbc.Col(html.H4("About Adobe Systems Inc.", className="my-4", style={'font-weight':'bold', 'color':'#d10737'}), width=6)]),
                     html.Div([
 
                         html.P([
-                            "Adobe Inc. is a ", html.Strong("global leader"), 
-                            " in digital media, creative software, and digital marketing solutions. The company is renowned for its ", 
-                            html.Em("industry-standard"), " products such as ", 
-                            html.Strong("Photoshop, Illustrator, Premiere Pro"), " and ", 
-                            html.Strong("Acrobat PDF"), "."
+                            "Adobe Systems Inc. was founded in 1982 and is headquartered in California. This software company offers a range of solutions for individual and commercial customers worldwide. Adobe products include", 
+                            html.Strong("Adobe Acrobat, Photoshop, InDesign, Illustrator, and more. ") ,
+                            "The company has offices in North America, Asia, Australia, New Zealand, Europe, the Middle East, Africa, and South America. For the fiscal year 2017, the company's revenue reached ", 
+                            html.Strong("$7.302 billion. ")
+                        
                         ]),
 
                         html.P([
@@ -141,10 +141,10 @@ class Analyse:
                     dbc.Row(dbc.Col(html.H4("Fundamental Analysis", className="display-7", style={'font-weight':'bold', 'color':'#d10737'}))),
                     dbc.Row(
                         [
-                            dbc.Col([html.Br(), self.card_top("fa fa-industry", "Sector", "This card has some text content")], width=3),
-                            dbc.Col([html.Br(), self.card_top("fa fa-cogs", "Industry", "This card has some text content")], width=3),
-                            dbc.Col([html.Br(), self.card_top("fa fa-user-tie", "CEO", "This card has some text content")], width=3),
-                            dbc.Col([html.Br(), self.card_top("fa fa-users", "Employees", "This card has some text content")], width=3),
+                            dbc.Col([html.Br(), self.card_top("fa fa-industry", "Sector", "Technology Services")], width=3),
+                            dbc.Col([html.Br(), self.card_top("fa fa-cogs", "Industry", "Packaged Software")], width=3),
+                            dbc.Col([html.Br(), self.card_top("fa fa-user-tie", "CEO", "Shantanu Narayen, MBA")], width=3),
+                            dbc.Col([html.Br(), self.card_top("fa fa-users", "Employees", "29 945")], width=3),
                         ]
                     ),
                     html.Br(),
