@@ -127,8 +127,16 @@ combined_df <- combined_df[order(combined_df$Date), ]
 ```{r}
 data <- read.csv(file.choose())
 data$Date <- as.Date(data$Date)
-data <- data[, c("Date", "Volatility", "SquaredVolatility")]
+data <- data[, c("Date", "Sigma", "Sigma2")]
 combined_df <- merge(combined_df, data, by = "Date", all.x = TRUE)
+```
+
+```{r}
+combined_df$sovereign_debt_crisis <- as.integer(combined_df$Date >= as.Date("2010-01-01") & combined_df$Date <= as.Date("2012-12-31"))
+combined_df$oil_shock <- as.integer(combined_df$Date >= as.Date("2014-01-01") & combined_df$Date <= as.Date("2016-12-31"))
+combined_df$trade_war <- as.integer(combined_df$Date >= as.Date("2018-01-01") & combined_df$Date <= as.Date("2019-12-31"))
+combined_df$covid_pandemic <- as.integer(combined_df$Date >= as.Date("2020-01-01") & combined_df$Date <= as.Date("2022-12-31"))
+combined_df$war_ukraine <- as.integer(combined_df$Date >= as.Date("2022-02-24"))
 ```
 
 ```{r}
@@ -229,11 +237,7 @@ spec.pgram(na.omit(combined_df$LNS12032195), log = "no", main = "Spectrum of the
 ```
 
 ```{r}
-combined_df$sovereign_debt_crisis <- as.integer(combined_df$Date >= as.Date("2010-01-01") & combined_df$Date <= as.Date("2012-12-31"))
-combined_df$oil_shock <- as.integer(combined_df$Date >= as.Date("2014-01-01") & combined_df$Date <= as.Date("2016-12-31"))
-combined_df$trade_war <- as.integer(combined_df$Date >= as.Date("2018-01-01") & combined_df$Date <= as.Date("2019-12-31"))
-combined_df$covid_pandemic <- as.integer(combined_df$Date >= as.Date("2020-01-01") & combined_df$Date <= as.Date("2022-12-31"))
-combined_df$war_ukraine <- as.integer(combined_df$Date >= as.Date("2022-02-24"))
+
 ```
 
 ### Prophet
@@ -248,7 +252,7 @@ library(ggplot2)
 # Préparation des données
 data.prohet <- combined_df %>% select(Date, Close, Volume, SMA, rsi, rsi.1, rsi.2, rsi.3, SMA.1, SMA.2, SMA.3, EMA, 
                      Close.1, High.1, macd, signal, obv, SMA.4, GSPC.Close, FCHI.Close, 
-                     EMVMACROBUS, CPIAUCSL, EXPINF1YR, LNS12032195, UMCSENT, Volatility, SquaredVolatility, sovereign_debt_crisis, oil_shock, trade_war, covid_pandemic, war_ukraine)%>%
+                     EMVMACROBUS, CPIAUCSL, EXPINF1YR, LNS12032195, UMCSENT, Sigma, Sigma2, sovereign_debt_crisis, oil_shock, trade_war, covid_pandemic, war_ukraine)%>%
   na.omit()  # Avec les calculs mobiles, certaines variables sont vides
 
 # Renommer pour Prophet
@@ -256,7 +260,7 @@ colnames(data.prohet)[1] <- "ds"
 colnames(data.prohet)[2] <- "y"
 
 # Séparation des données en train et test
-train_end_date <- as.Date("2024-01-30")
+train_end_date <- as.Date("2024-01-01")
 train_data <- data.prohet %>% filter(ds <= train_end_date)
 test_data <- data.prohet %>% filter(ds > train_end_date)
 
@@ -285,8 +289,8 @@ model <- add_regressor(model, 'CPIAUCSL')
 model <- add_regressor(model, 'EXPINF1YR')
 model <- add_regressor(model, 'LNS12032195')
 model <- add_regressor(model, 'UMCSENT')
-model <- add_regressor(model, 'Volatility')
-model <- add_regressor(model, 'SquaredVolatility')
+model <- add_regressor(model, 'Sigma')
+model <- add_regressor(model, 'Sigma2')
 model <- add_regressor(model, 'sovereign_debt_crisis')
 model <- add_regressor(model, 'oil_shock')
 model <- add_regressor(model, 'trade_war')
@@ -336,36 +340,46 @@ rmse <- function(actual, predicted) {
 
 ```{r}
 
-variable_contribution <- function(model, data, test_data, train_end_date) {
+variable_contribution <- function(model, data, test_data, train_end_date, n_permutations = 10) {
+
   # Prédiction de base (toutes les variables)
   future <- data.frame(ds = seq.Date(from = min(test_data$ds), to = max(test_data$ds), by = "day"))
   future <- left_join(future, data, by = 'ds') %>% na.omit()
   full_forecast <- predict(model, future)
   base_rmse <- rmse(test_data$y, full_forecast$yhat)
-  
-  # Contribution par permutation de chaque variable
+
+  # Initialiser les contributions moyennes
   contributions <- list()
-  
+
   for (var in colnames(data)[3:ncol(data)]) {  # Ignorer ds et y
-    permuted_data <- future
-    permuted_data[[var]] <- sample(permuted_data[[var]])  # Permutation de la colonne
-    
-    # Prédiction avec la variable permutée
-    permuted_forecast <- predict(model, permuted_data)
-    permuted_rmse <- rmse(test_data$y, permuted_forecast$yhat)
-    
-    # Contribution = Différence de RMSE
-    contributions[[var]] <- permuted_rmse - base_rmse
+    permuted_rmse_list <- c()
+
+    for (i in 1:n_permutations) {
+      # Permutation de la variable
+      permuted_data <- future
+      permuted_data[[var]] <- sample(permuted_data[[var]])
+
+      # Prédiction avec la variable permutée
+      permuted_forecast <- predict(model, permuted_data)
+      permuted_rmse <- rmse(test_data$y, permuted_forecast$yhat)
+
+      # Stocker la différence de RMSE
+      permuted_rmse_list <- c(permuted_rmse_list, permuted_rmse - base_rmse)
+    }
+
+    # Moyenne des contributions
+    contributions[[var]] <- mean(permuted_rmse_list)
   }
-  
-  # Retourner les contributions
+
+  # Retourner les contributions moyennes
   contributions_df <- data.frame(
     Variable = names(contributions),
     Contribution = unlist(contributions)
   ) %>% arrange(desc(Contribution))
-  
+
   return(contributions_df)
 }
+
 ```
 
 ```{r}
@@ -377,7 +391,7 @@ print(contributions)
 ```{r}
 # Graphique des contributions
 plot_contributions <- function(contributions_df) {
-  ggplot(contributions_df[4:30,], aes(x = reorder(Variable, Contribution), y = Contribution, fill = Contribution)) +
+  ggplot(contributions_df, aes(x = reorder(Variable, Contribution), y = Contribution, fill = Contribution)) +
     geom_bar(stat = "identity") +
     coord_flip() +
     scale_fill_gradient(low = "blue", high = "red") +
@@ -389,4 +403,141 @@ plot_contributions <- function(contributions_df) {
 
 # Affichage du graphique
 plot_contributions(contributions)
+```
+
+### Garch-Farima
+
+```{r}
+Rend <- na.omit(combined_df$Rend)  
+```
+
+```{r}
+grid_search <- function(data, max_pq_farima = 3, max_pq_garch = 3) {
+  # Initialiser un dataframe pour stocker les résultats
+  results <- data.frame(
+    p_farima = integer(),
+    q_farima = integer(),
+    p_garch = integer(),
+    q_garch = integer(),
+    aic = numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  # Boucle pour p et q de FARIMA
+  for (p_farima in 1:max_pq_farima) {
+    for (q_farima in 1:max_pq_farima) {
+      # Boucle pour p et q de GARCH
+      for (p_garch in 1:max_pq_garch) {
+        for (q_garch in 1:max_pq_garch) {
+          # Spécification du modèle
+          spec <- ugarchspec(
+            variance.model = list(model = "sGARCH", garchOrder = c(p_garch, q_garch)),
+            mean.model = list(armaOrder = c(p_farima, q_farima), include.mean = TRUE, arfima = TRUE),
+            distribution.model = "norm"  # Distribution normale
+          )
+
+          # Essayer d’ajuster le modèle et capturer les erreurs
+          fit <- tryCatch({
+            ugarchfit(spec = spec, data = data)
+          }, error = function(e) NULL)
+
+          # Si l’ajustement est valide, calculer l’AIC et ajouter au dataframe
+          if (!is.null(fit)) {
+            aic <- (-2*fit@fit[["LLH"]]) + 2*(length(coef(fit))-1)  # Extraire AIC
+            if(length(aic) != 0){
+              results <- rbind(results, data.frame(
+              p_farima = p_farima,
+              q_farima = q_farima,
+              p_garch = p_garch,
+              q_garch = q_garch,
+              aic = aic
+            ))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  # Trier les résultats par AIC
+  results <- results[order(results$aic), ]
+
+  # Retourner le dataframe trié
+  return(results)
+}
+```
+
+```{r}
+# Exécuter la recherche (Attention ça dure)
+results <- grid_search(data = Rend, max_pq_farima = 3, max_pq_garch = 3)
+```
+
+```{r}
+# Définir la spécification du modèle ARFIMA + GARCH
+spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 1)),  # GARCH(2,1)
+  mean.model = list(armaOrder = c(3, 1), include.mean = TRUE, archm = FALSE, arfima = TRUE),  # FARIMA(3,d,1)
+  distribution.model = "norm"  # Distribution normale
+)
+
+# Ajuster le modèle sur les données
+best_model <- ugarchfit(spec = spec, data = na.omit(Rend))
+
+# Résultats de l'ajustement
+best_model
+```
+
+```{r}
+volatility <- sigma(best_model)
+
+# Tracer la volatilité
+plot(volatility, type = "l", col = "blue", main = "Volatilité Conditionnelle (GARCH)", ylab = "Volatilité")
+lines(Rend, col = "gray")
+```
+
+```{r}
+volatility <- c(NA, volatility)
+combined_df$Sigma <- volatility
+```
+
+```{r}
+## Pour le carré du rendement (Attention ça dure)
+results2 <- grid_search(data = Rend**2, max_pq_farima = 3, max_pq_garch = 3)
+```
+
+```{r}
+# Définir la spécification du modèle ARFIMA + GARCH
+spec <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(2, 3)),  # GARCH(2,3)
+  mean.model = list(armaOrder = c(3, 1), include.mean = TRUE, archm = FALSE, arfima = TRUE),  # FARIMA(3,d,2)
+  distribution.model = "norm"  # Distribution normale
+)
+
+# Ajuster le modèle sur les données
+best_model_sq <- ugarchfit(spec = spec, data = Rend**2)
+
+# Résultats de l'ajustement
+best_model_sq
+```
+
+```{r}
+volatility_sq <- sigma(best_model_sq)
+
+# Tracer la volatilité
+plot(volatility_sq, type = "l", col = "blue", main = "Volatilité Conditionnelle (GARCH)", ylab = "Volatilité")
+lines(Rend, col = "gray")
+```
+
+```{r}
+volatility_sq <- c(NA, volatility_sq)
+combined_df$Sigma2 <- volatility_sq
+```
+
+```{r}
+# Sélectionner les colonnes désirées
+data_to_export <- combined_df[, c("Date", "Sigma2", "Sigma")]
+
+# Exporter le dataframe dans un fichier CSV
+write.csv(data_to_export, "volatilite_estimee.csv", row.names = FALSE)
+
 ```
