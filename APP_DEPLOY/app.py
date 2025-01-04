@@ -13,6 +13,7 @@ import pandas as pd
 import numpy as np
 
 from components.menu import *
+from components.prophet import ProphetForecast
 from components.analyse import Analyse
 from components.techn import Techn
 from components.model import Model
@@ -22,8 +23,13 @@ import plotly.express as px
 import pandas as pd
 from collections import Counter
 
-import time
+from dash_holoniq_wordcloud import DashWordcloud
 
+import requests
+import re
+from nltk.sentiment import SentimentIntensityAnalyzer
+import nltk
+nltk.download('vader_lexicon')
 
 
 # Initialisation du chemin permettant le lancement de l'application
@@ -41,6 +47,7 @@ analyse = Analyse()
 tech = Techn() 
 model = Model() 
 calibration = Calibration() 
+
 
 CONTENT_STYLE = {
         "margin-left": "18rem",
@@ -62,6 +69,36 @@ app.layout = html.Div(
     ])
 
 
+
+date_considere = (datetime.today() - timedelta(days=1)).date().strftime("%Y-%m-%d")
+api_key = '1212688ede774309ad6e24ee2a5bd970'
+
+def get_news(date, api_key):
+    # URL de NewsAPI
+    url = f'https://newsapi.org/v2/everything?q=adobe&?country=us&from={date}&sortBy=publishedAt&apiKey={api_key}'
+
+    # Faire la requête
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        data = response.json()
+        
+        news_data = []
+
+        # Vérifier s'il y a des articles dans la réponse
+        if data['articles']:
+            df = pd.json_normalize(data['articles'])[["publishedAt", "title", "description"]]
+            
+            df.columns = ["Date", "Title", "Description"]
+            df = df[["Title", "Description"]]
+            return df
+        else:
+            print("Aucun article trouvé pour cette date.")
+            return pd.DataFrame() 
+    else:
+        print(f"Erreur lors de la récupération des actualités. Code : {response.status_code}")
+        return pd.DataFrame()
+    
 ##############################
 # Import des données d'Adobe et des indices
 start_date = '2010-01-01'
@@ -118,6 +155,69 @@ def calculate_indicators(df):
     return df
 
 adobe_data = calculate_indicators(adobe_data)
+adobe_data['Date'] = pd.to_datetime(adobe_data.index)
+
+forecast_model = ProphetForecast(adobe_data)
+forecast_model.fit_model()
+
+
+
+
+
+
+scrapped_data = get_news(date_considere, api_key)
+
+
+text = ' '.join(scrapped_data['Title']) + ' ' + ' '.join(scrapped_data['Description'])
+# Convertir le texte en minuscules
+text = text.lower()
+
+# Retirer les caractères spéciaux, chiffres, et ponctuation
+text = re.sub(r'[^a-z\s]', '', text)
+
+# Liste des prépositions à retirer
+prepositions = {'de', 'la', 'le', 'des', 'en', 'pour', 'avec', 'sans', 'sur', 'par', 'à', 'et', 'mais', 'ou'}
+
+# Tokenisation du texte (division en mots)
+words = text.split()
+
+# Retirer les prépositions et les mots de moins de 3 caractères
+words = [word for word in words if word not in prepositions and len(word) > 4]
+
+# Compter la fréquence des mots
+word_counts = Counter(words)
+
+df_words = pd.DataFrame(word_counts.items(), columns=['Word', 'Count'])
+df_words['Count'] = df_words['Count']*10
+
+
+# Initialisation de l'analyseur de sentiment
+sia = SentimentIntensityAnalyzer()
+
+# Fonction pour classer le sentiment
+def classify_sentiment(text):
+    sentiment_score = sia.polarity_scores(text)
+    compound_score = sentiment_score['compound']
+    
+    if compound_score >= 0.05:
+        return 'Positive'
+    elif compound_score <= -0.05:
+        return 'Negative'
+    else:
+        return 'Neutral'
+
+# Appliquer l'analyse de sentiment sur les titres et descriptions
+scrapped_data['Sentiment'] = scrapped_data['Title'] + ' ' + scrapped_data['Description']
+scrapped_data['Sentiment'] = scrapped_data['Sentiment'].apply(classify_sentiment)
+
+
+sentiment_counts = scrapped_data['Sentiment'].value_counts()
+
+# Créer le dataframe sentiment_data
+sentiment_data = pd.DataFrame({
+    'Sentiment': sentiment_counts.index,
+    'Count': sentiment_counts.values
+})
 
 
 # Callback pour mettre à jour le contenu de la page en fonction du chemin d'URL
@@ -251,7 +351,7 @@ def update_graph_and_table(year_range):
     Input('load-data-button', 'n_clicks') 
 )
 def initialize_days(_):
-    return 60
+    return 10
 
 
 @app.callback(
@@ -259,20 +359,82 @@ def initialize_days(_):
     [Input('load-data-button', 'n_clicks'), Input("future-days", "value")]
 )
 def update_adobe_predict(n_clicks, p):
-    print(type(p))
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(x=adobe_data.index, y=adobe_data['Close'], mode='lines', name='Close'))
 
+    forecast = forecast_model.predict(p)
+    
     # Ajouter une barre verticale pour la date d'aujourd'hui
     today = datetime.today().date()
     fig.add_vline(x=today, line_width=2, line_dash="dash", line_color="red")
 
+    fig.add_trace(go.Scatter(x=forecast.ds, y=forecast['yhat'], mode='lines', name='Prediction'))
+
     fig.update_layout(title='Adobe Stock Prediction', xaxis_rangeslider_visible=False)
 
-    table_data = adobe_data[['Close', 'High', 'Low', 'Open', 'Volume']].to_dict('records')
+    # Préparer les données du tableau
+    forecast['ds'] = forecast['ds'].astype(str)
+    forecast[['yhat', 'yhat_lower', 'yhat_upper']] = forecast[['yhat', 'yhat_lower', 'yhat_upper']].round(3)
 
-    return fig , table_data, [{"name": i, "id": i} for i in ['Close', 'High', 'Low', 'Open', 'Volume']]
+
+    table_data = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(p).to_dict('records')
+    columns = [{"name": i, "id": i} for i in ['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
+
+
+    return fig , table_data, columns
+
+
+
+############################ CALIBRATION BY NEWS #################################
+
+@app.callback(
+    [Output('word-graph', 'children'),
+     Output('sentiment-graph', 'figure'),
+     Output('scrapped-table', 'data'),
+     Output('scrapped-table', 'columns'),
+     Output('day-table', 'data'),
+     Output('day-table', 'columns')],
+    [Input('load-data-button', 'n_clicks')]
+)
+def update_news_calibration(n_clicks):
+    # Nuage de mots
+    wordcloud = DashWordcloud(
+        list=[[word, count] for word, count in zip(df_words['Word'], df_words['Count'])],
+        width=800, height=450,
+        gridSize=16,
+        shuffle=False,
+        rotateRatio=0.5,
+        shrinkToFit=True,
+        shape='circle',
+        hover=True
+    )
+
+    color_map = {
+        'Positive': '#00FF00',  # Vert pour Positive
+        'Negative': '#FF0000',  # Rouge pour Negative
+        'Neutral': '#808080'    # Gris pour Neutral
+    }
+    colors = [color_map[sentiment] for sentiment in sentiment_data['Sentiment']]
+
+    # Graphique en camembert pour l'analyse de sentiment
+    fig_sentiment = go.Figure()
+    fig_sentiment.add_trace(go.Pie(labels=sentiment_data['Sentiment'], values=sentiment_data['Count'], marker=dict(colors=colors)))
+    fig_sentiment.update_layout(title='Sentiment Analysis')
+
+    # Données pour la table
+    forecast = forecast_model.predict(1)
+    forecast[['yhat', 'yhat_lower', 'yhat_upper']] = forecast[['yhat', 'yhat_lower', 'yhat_upper']].round(3)
+
+
+    table_data_pred = forecast[['yhat', 'yhat_lower', 'yhat_upper']].tail(1).to_dict('records')
+    columns_pred = [{"name": i, "id": i} for i in ['yhat', 'yhat_lower', 'yhat_upper']]
+
+    table_data = scrapped_data.to_dict('records')
+    table_columns = [{'name': col, 'id': col} for col in scrapped_data.columns]
+    
+    
+    return html.Div([wordcloud]), fig_sentiment, table_data, table_columns, table_data_pred, columns_pred
 
 
 if __name__ == '__main__':
