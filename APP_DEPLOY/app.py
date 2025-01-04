@@ -7,7 +7,7 @@ import dash_bootstrap_components as dbc
 import plotly.express as px
 import plotly.graph_objects as go
 import yfinance as yf
-from ta.trend import SMAIndicator, EMAIndicator
+from ta.trend import SMAIndicator, EMAIndicator, MACD
 from ta.momentum import RSIIndicator
 import pandas as pd
 import numpy as np
@@ -102,7 +102,6 @@ for column in columns_to_normalize:
 
 # Calcul des indicateurs techniques pour Adobe
 def calculate_indicators(df):
-    df['MAV5Day'] = SMAIndicator(df['Volume'], window=5).sma_indicator()
     df['RSI3Day'] = RSIIndicator(df['Close'], window=3).rsi()
     df['RSI9Day'] = RSIIndicator(df['Close'], window=9).rsi()
     df['RSI14Day'] = RSIIndicator(df['Close'], window=14).rsi()
@@ -111,6 +110,11 @@ def calculate_indicators(df):
     df['MA30Day'] = SMAIndicator(df['Close'], window=30).sma_indicator()
     df['MA50Day'] = SMAIndicator(df['Close'], window=50).sma_indicator()
     df['EMA10Day'] = EMAIndicator(df['Close'], window=10).ema_indicator()
+    # MACD
+    macd = MACD(df['Close'])
+    df['MACD'] = macd.macd()
+    df['Signal'] = macd.macd_signal()
+
     return df
 
 adobe_data = calculate_indicators(adobe_data)
@@ -243,11 +247,19 @@ def update_graph_and_table(year_range):
 ############################ MODELE DEPLOYE #################################
 
 @app.callback(
-    [Output('predict-graph', 'figure'),  Output('predict-table', 'data'), Output('predict-table', 'columns')],
-    [Input('load-data-button', 'n_clicks')]
+    Output("future-days", "value"),
+    Input('load-data-button', 'n_clicks') 
 )
-def update_adobe_predict(n_clicks):
+def initialize_days(_):
+    return 60
 
+
+@app.callback(
+    [Output('predict-graph', 'figure'),  Output('predict-table', 'data'), Output('predict-table', 'columns')],
+    [Input('load-data-button', 'n_clicks'), Input("future-days", "value")]
+)
+def update_adobe_predict(n_clicks, p):
+    print(type(p))
     fig = go.Figure()
 
     fig.add_trace(go.Scatter(x=adobe_data.index, y=adobe_data['Close'], mode='lines', name='Close'))

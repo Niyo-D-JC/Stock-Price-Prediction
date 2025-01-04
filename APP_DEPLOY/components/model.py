@@ -27,18 +27,17 @@ class Model:
                 className="radio-group",
             )
 
-        self.tab_group =  dbc.ListGroup([
-                                    dbc.ListGroupItem("Financial Performance", active=True),
-                                    dbc.ListGroupItem("Revenue Growth: 12%"),
-                                    dbc.ListGroupItem("Profit Margins: 30.51%"),
-                                    dbc.ListGroupItem("EPS: $14.25"),
-                                    dbc.ListGroupItem("FCF: $6.8B"),
-                                    dbc.ListGroupItem("ROE: 29%"),
-                                    dbc.ListGroupItem("P/E Ratio: 35.57"),
-                                    dbc.ListGroupItem("Total Assets: $29.83B"),
-                                    dbc.ListGroupItem("Dividend Yield: N/A"),
-                                ])
-        
+        self.tab_group =  dbc.ListGroup(
+                    [
+                        dbc.ListGroupItem("Model Performance Metrics", active=True),
+                        dbc.ListGroupItem("RMSE: 7.20"),
+                        dbc.ListGroupItem("MAE: 4.76"),
+                        dbc.ListGroupItem("MAPE: 0.90%"),
+                        dbc.ListGroupItem("Training Period: Jan 2010 - Dec 2023"),
+                        dbc.ListGroupItem("Test Period: Jan 2024 - Oct 2024"),
+                        dbc.ListGroupItem("Last Updated: 04 Jan 2025")
+                    ]
+                )      
         
     def render(self):
         row = html.Div(
@@ -48,14 +47,24 @@ class Model:
                         [
                             # Colonne de gauche avec le RangeSlider et un graphique
                             dbc.Col([dcc.Graph(id='predict-graph')], width=9),
-                            dbc.Col([html.Br(), self.tab_group], width=3),
+                            dbc.Col([html.Br(), html.H5("Number of Future Days :", style={"color": "#2c3e50", "fontWeight": "normal" }) ,
+                                     dbc.Input(id="future-days",debounce=True, type='number', placeholder="Valid input...", valid=True, className="mb-3"),
+                                     self.tab_group], width=3),
                         ]
                     ),
                     dbc.Row(
                         [
                             # Colonne de gauche avec le RangeSlider et un graphique
-                            dbc.Col([html.Br(), dash_table.DataTable(id="predict-table", filter_action="native", filter_options={"placeholder_text": "Filtrer..."}, page_size=10)], width=9),
-                        ]
+                            dbc.Col([html.H5("Table of Predictions and Confidence Intervals", style={
+                                "color": "#2c3e50",  # Bleu nuit
+                                "fontWeight": "normal" , # Texte moins gras
+                                "marginLeft": "30px",
+                            }), html.Br(),  dash_table.DataTable(id="predict-table", filter_action="native", filter_options={"placeholder_text": "Filter..."}, page_size=10)], width=9),
+                        ],
+                        style={
+                            "marginLeft": "20px",
+                            "marginRight": "20px"
+                        }
                     )
                 ]
             )

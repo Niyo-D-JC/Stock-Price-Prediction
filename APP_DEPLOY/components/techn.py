@@ -55,7 +55,7 @@ class Techn:
                         [
                             dbc.Col([html.Br(), dcc.Graph(id='line-chart')], width=6),
                             # Colonne de droite avec une table de données filtrable
-                            dbc.Col([html.Br(), dash_table.DataTable(id="data-table", filter_action="native", filter_options={"placeholder_text": "Filtrer..."}, page_size=10)], width=6),
+                            dbc.Col([html.Br(), dash_table.DataTable(id="data-table", filter_action="native", filter_options={"placeholder_text": "Filter..."}, page_size=10)], width=6),
                         ], style={'height': '400px'}
                     ),
                 ]
