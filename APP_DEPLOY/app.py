@@ -166,7 +166,7 @@ forecast_model.fit_model()
 
 
 scrapped_data = get_news(date_considere, api_key)
-
+scrapped_data = scrapped_data.dropna()
 
 text = ' '.join(scrapped_data['Title']) + ' ' + ' '.join(scrapped_data['Description'])
 # Convertir le texte en minuscules
